@@ -52,11 +52,11 @@ backtest = BacktestEngine(data, risk, db)
 
 def spawn_agents():
     agents = {
-        "athena": AthenaAgent(25000, db, market, data, news, risk),
-        "orion": OrionAgent(25000, db, market, data, news, risk),
-        "sibyl": SibylAgent(15000, db, market, data, news, risk),
-        "janus": JanusAgent(15000, db, market, data, news, risk),
-        "mercury": MercuryAgent(15000, db, market, data, news, risk, crypto_market=crypto, shared_knowledge=sk),
+        "athena": AthenaAgent(500, db, market, data, news, risk),
+        "orion": OrionAgent(500, db, market, data, news, risk),
+        "sibyl": SibylAgent(500, db, market, data, news, risk),
+        "janus": JanusAgent(500, db, market, data, news, risk),
+        "mercury": MercuryAgent(500, db, market, data, news, risk, crypto_market=crypto, shared_knowledge=sk),
     }
     print("\n=== MINT TRADING COMPANY — AGENTS SPAWNED ===\n")
     for name, agent in agents.items():

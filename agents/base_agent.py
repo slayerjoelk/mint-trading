@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 import yaml
+from scipy import stats  # for statistical tests (shapiro, ttest, skew, kurtosis)
 
 _AGENTS_ROOT = Path(__file__).parent
 

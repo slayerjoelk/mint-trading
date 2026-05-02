@@ -14,7 +14,7 @@ class RiskManager:
         self,
         market,
         db,
-        max_position_pct: float = 0.20,
+        max_position_pct: float = 0.02,
         max_portfolio_exposure: float = 0.80,
         max_daily_trades: int = 5,
         max_drawdown_pct: float = 0.25,

@@ -4,6 +4,8 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import yfinance as yf
+import ta  # technical analysis — installed: 'ta' package
+from scipy import stats  # for statistical tests
 
 logger = logging.getLogger(__name__)
 
@@ -29,49 +31,41 @@ class DataPipeline:
     # ── Indicators ────────────────────────────────────────────────────────────
 
     def compute_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Compute all technical indicators using the 'ta' library."""
         df = df.copy()
         close = df["close"]
         high = df["high"]
         low = df["low"]
         volume = df["volume"]
 
-        # SMAs
-        df["sma_20"] = close.rolling(20).mean()
-        df["sma_50"] = close.rolling(50).mean()
-
-        # EMAs
-        df["ema_12"] = close.ewm(span=12, adjust=False).mean()
-        df["ema_26"] = close.ewm(span=26, adjust=False).mean()
+        # Trend indicators
+        df["sma_20"] = ta.trend.sma_indicator(close, window=20)
+        df["sma_50"] = ta.trend.sma_indicator(close, window=50)
+        df["ema_12"] = ta.trend.ema_indicator(close, window=12)
+        df["ema_26"] = ta.trend.ema_indicator(close, window=26)
 
         # MACD
-        df["macd"] = df["ema_12"] - df["ema_26"]
-        df["macd_signal"] = df["macd"].ewm(span=9, adjust=False).mean()
-        df["macd_hist"] = df["macd"] - df["macd_signal"]
+        macd = ta.trend.MACD(close)
+        df["macd"] = macd.macd()
+        df["macd_signal"] = macd.macd_signal()
+        df["macd_hist"] = macd.macd_diff()
 
-        # RSI(14)
-        delta = close.diff()
-        gain = delta.clip(lower=0).rolling(14).mean()
-        loss = (-delta.clip(upper=0)).rolling(14).mean()
-        rs = gain / loss.replace(0, np.nan)
-        df["rsi_14"] = 100 - (100 / (1 + rs))
+        # Momentum
+        df["rsi_14"] = ta.momentum.rsi(close, window=14)
 
-        # Bollinger Bands (20, 2)
-        bb_mid = close.rolling(20).mean()
-        bb_std = close.rolling(20).std()
-        df["bb_upper"] = bb_mid + 2 * bb_std
-        df["bb_mid"] = bb_mid
-        df["bb_lower"] = bb_mid - 2 * bb_std
-        df["bb_width"] = (df["bb_upper"] - df["bb_lower"]) / bb_mid
+        # Volatility — Bollinger Bands
+        bb = ta.volatility.BollingerBands(close, window=20, window_dev=2)
+        df["bb_upper"] = bb.bollinger_hband()
+        df["bb_mid"] = bb.bollinger_mavg()
+        df["bb_lower"] = bb.bollinger_lband()
+        df["bb_width"] = (df["bb_upper"] - df["bb_lower"]) / df["bb_mid"]
 
-        # ATR(14)
-        tr = pd.concat([
-            high - low,
-            (high - close.shift()).abs(),
-            (low - close.shift()).abs(),
-        ], axis=1).max(axis=1)
-        df["atr_14"] = tr.rolling(14).mean()
+        # ATR
+        df["atr_14"] = ta.volatility.average_true_range(high, low, close, window=14)
 
-        # Volume SMA(20)
+        # Volume
+        df["vol_sma_20"] = ta.volume.volume_weighted_average_price(high, low, close, volume, window=20)
+        # Note: VWAP is close-proxy for volume trend. Real vol SMA:
         df["vol_sma_20"] = volume.rolling(20).mean()
 
         return df
