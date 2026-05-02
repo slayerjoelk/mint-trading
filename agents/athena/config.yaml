@@ -1,0 +1,14 @@
+asset_focus: large_cap_equities
+bb_std_dev: 2.0
+created_at: '2026-05-02T14:38:01.211717+00:00'
+hold_days: 5
+initial_capital: 25000
+lookback_period: 20
+max_atr_pct: 0.03
+max_positions: 5
+name: Athena
+risk_per_trade: 0.02
+rsi_overbought: 70
+rsi_oversold: 30
+strategy_version: '1.0'
+style: mean_reversion

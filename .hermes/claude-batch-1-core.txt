@@ -1,0 +1,41 @@
+You are Claude Code. Build the CORE ENGINE for the Mint Trading Company. This is a Python trading system that runs AI agents on Alpaca paper trading.
+
+Build these 3 files:
+
+=== File 1: core/db.py ===
+SQLite database layer. Create a DatabaseManager class that:
+- Creates and manages tables: agents, trades, trade_journal (agent's detailed post-trade analysis), strategies, news_events, signals, daily_performance
+- Uses /usr/bin/python3 and built-in sqlite3 module
+- Database path: data/mint_trading.db
+- Methods: create_tables(), insert_agent(), log_trade(), log_journal_entry(), save_strategy(), record_news(), record_signal(), record_daily_perf()
+- Each method handles its own INSERT with proper column escaping
+- Trade journal must have: trade_id, agent_id, ticker, entry_price, exit_price, pnl, pre_trade_reasoning (why they entered), post_trade_analysis (what they learned), market_conditions (dict as JSON string), lessons_learned, timestamp
+- All tables use TEXT for IDs (UUIDs), REAL for prices/pnl, INTEGER for timestamps
+
+=== File 2: core/market.py ===
+Alpaca Markets API wrapper. Create a MarketInterface class that:
+- Uses alpaca-py library (already installed: 0.43.4, paper keys in env vars APCA_API_KEY_ID and APCA_API_SECRET_KEY)
+- Paper trading endpoint
+- Methods: get_account(), get_positions(), get_portfolio_value(), submit_order(symbol, qty, side, type, limit_price=None, stop_price=None), cancel_all_orders(), get_order_status(order_id), get_bars(symbols, timeframe, limit), get_clock() — is market open?
+- Order types: market, limit, stop_limit
+- Returns clean Python dicts, not raw API objects
+- Handle API errors gracefully — never crash, return error dict
+
+=== File 3: core/data_pipeline.py ===
+Market data and feature engineering. Create a DataPipeline class that:
+- Uses yfinance 1.2.0 for historical data (already installed)
+- Uses pandas 2.3.3 and numpy 1.23.5 (already installed)
+- Methods:
+  - get_daily_bars(ticker, period='3mo') → DataFrame with OHLCV
+  - compute_indicators(df) → add: SMA(20), SMA(50), EMA(12), EMA(26), RSI(14), MACD, Bollinger Bands (20,2), ATR(14), Volume SMA(20)
+  - get_market_regime() → classify current market as: trending_up, trending_down, ranging, high_volatility, low_volatility
+  - get_features(ticker) → return dict of latest indicator values
+  - get_universe_stats(tickers) → return DataFrame with momentum, volatility, volume_ratio for a list of tickers
+- Handle weekends/holidays — return None if data unavailable
+- Never crash on bad tickers — log and return empty
+
+After building all 3 files, test with: /usr/bin/python3 -c "
+from core.db import DatabaseManager; db = DatabaseManager(); db.create_tables(); print('DB: OK')
+from core.market import MarketInterface; m = MarketInterface(); a = m.get_account(); print(f'Account: {a}')
+from core.data_pipeline import DataPipeline; d = DataPipeline(); df = d.get_daily_bars('AAPL'); print(f'AAPL bars: {len(df) if df is not None else 0} rows')
+"

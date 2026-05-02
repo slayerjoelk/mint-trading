@@ -1,0 +1,54 @@
+You are Claude Code. Build the 4 CONCRETE TRADING AGENTS for Mint Trading Company.
+
+These agents inherit from BaseAgent and MUST implement: research(), generate_signals(), learn_from_trades(). Each agent gets its own subdirectory under agents/ with strategy files and config.
+
+Read the base agent first: agents/base_agent.py — understand the interface, the journal method, the performance metrics available.
+
+=== AGENT 1: agents/athena/athena_agent.py ===
+Athena — Mean Reversion Trader
+- Style: Statistical mean reversion on large-cap stocks
+- Asset universe: ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'JPM', 'V', 'JNJ', 'PG', 'WMT', 'DIS', 'NFLX', 'ADBE', 'CRM']
+- Strategy: Trade when price deviates 2+ standard deviations from 20-day SMA. Enter on reversion signal. Exit at SMA or after 5 days.
+- Research method: For each ticker in universe, pull 1 year of daily bars. Test: at each 2σ deviation, what % revert to mean within 1/3/5 days? What % continue trending away? Output a research report saved to agents/athena/research_report.md with stats per ticker.
+- Signal generation: Check each ticker's current price vs Bollinger Bands. If price < BB_lower → BUY signal with confidence = how far below. If price > BB_upper → SELL signal. RSI must confirm: RSI < 30 for buys, > 70 for sells. Filter: skip if ATR(14)/price > 3% (too volatile for mean reversion).
+- Learning: After each closed trade batch, analyze: were mean reversion signals more reliable in trending or ranging regimes? Which tickers reverted fastest? Update the lookback period or entry threshold based on data. Save new strategy version with specific parameter changes and the evidence behind them.
+- Journal entries must reference specific indicator values at entry and exit.
+
+=== AGENT 2: agents/orion/orion_agent.py ===
+Orion — Momentum Breakout Trader
+- Style: Trend-following momentum on high-beta tech stocks
+- Asset universe: ['NVDA', 'AMD', 'TSLA', 'META', 'NFLX', 'CRM', 'ADBE', 'SHOP', 'SNOW', 'PLTR', 'COIN', 'SQ', 'UBER', 'DDOG', 'NET']
+- Strategy: Enter when price breaks above 20-day high with volume 1.5x above average. Exit when price falls below 10-day low or after 7 days, whichever comes first.
+- Research: For each ticker, backtest: on every 20-day-high breakout with volume confirmation, what's the 3/5/7-day forward return? What's the win rate? What's the average gain vs average loss? Output research report to agents/orion/research_report.md.
+- Signal generation: Check each ticker for: close > 20-day high? volume > 1.5x vol_sma_20? MACD positive and rising? If all three → BUY. For exits: has it been held 7 days OR price < 10-day low? → SELL.
+- Confirmation filters: skip if market regime is "high_volatility" or "trending_down" — momentum doesn't work in those environments.
+- Learning: After each batch, test: does adding RSI filter improve win rate? Does a 4-day exit outperform 7-day? What's the optimal volume multiplier? Update parameters. Each parameter change must cite the specific win-rate improvement it produced.
+- Journal entries must note the market regime at entry AND exit — was momentum flowing with or against the broader market?
+
+=== AGENT 3: agents/sibyl/sibyl_agent.py ===
+Sibyl — News-Driven Catalyst Trader
+- Style: Trades tickers with significant news catalysts
+- Asset universe: Dynamic — any ticker that appears in the news pipeline with strong sentiment
+- Strategy: When news sentiment for a ticker exceeds +0.6, enter a buy. When it drops below -0.6, enter a sell (short if possible, otherwise avoid). Hold for 1-3 days. Exit when sentiment reverses or PnL target hit (+5%).
+- Research: Pull 30 days of news. For each ticker that had sentiment > 0.5, what was the 1/3/5-day forward return? Does sentiment magnitude correlate with return magnitude? Output findings to agents/sibyl/research_report.md.
+- Signal generation: Query news pipeline for top sentiment tickers. For each: check pre-market gap (if available). Strong positive sentiment + positive pre-market → BUY. Strong negative + negative gap → SELL. Filter out tickers with ATR/price > 5% (too volatile for news fade).
+- Learning: Track: which news sources produce the most profitable signals? Does sentiment alone work, or is confirmation from price action needed? Are earnings-related news trades more profitable than general market news? Update entry criteria based on evidence.
+- Journal entries must include the specific news headline that triggered the trade and its sentiment score.
+
+=== AGENT 4: agents/janus/janus_agent.py ===
+Janus — Volatility & Market Structure Trader
+- Style: Trades volatility products and market structure
+- Asset universe: ['SPY', 'QQQ', 'IWM', 'VIXY', 'UVXY', 'SVXY', 'TQQQ', 'SQQQ']
+- Strategy: When VIX spikes (VIXY up > 5% in a day), fade the spike — buy inverse vol (SVXY) or sell VIXY. When VIX compresses (VIXY < 15), buy volatility as portfolio hedge. Trade mean reversion in leveraged ETFs (TQQQ/SQQQ) when they deviate 2% from their underlying.
+- Research: Pull 2 years of VIX data. Study: after every VIX spike > 20%, how long until mean reversion? What's the average retracement? Output to agents/janus/research_report.md.
+- Signal generation: Check VIXY daily return. If > 5% → SELL VIXY signal. If VIXY < 15 AND VIX term structure in contango → BUY VIXY signal (long vol hedge). Check TQQQ vs QQQ: if TQQQ change != 3x QQQ change → mean reversion trade.
+- Learning: After each vol trade: did the spike revert or was there a regime change? Is this a vol spike in an uptrend (bullish, buy dip) or downtrend (bearish, stay short)? Learn to distinguish. Update holding period or entry threshold.
+- Journal entries must note the VIX level at entry, the term structure, and whether this was a "buy the dip" or "sell the rip" environment.
+
+All 4 agents must:
+- Import from agents.base_agent import BaseAgent
+- Call super().__init__() properly with all 5 infrastructure objects
+- Have proper __init__.py in each subdirectory
+- Each agent's generate_signals() must limit to max 5 signals per run
+- Each agent's learn_from_trades() must save a new strategy version with a meaningful description of what changed and why
+- Journal entries must be rich — specific indicator values, market regime, reasoning chain. Not generic "I won" or "I lost."
