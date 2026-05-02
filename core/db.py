@@ -116,6 +116,35 @@ class DatabaseManager:
             recorded_at INTEGER,
             FOREIGN KEY (agent_id) REFERENCES agents(id)
         );
+
+        CREATE TABLE IF NOT EXISTS shared_knowledge (
+            id TEXT PRIMARY KEY,
+            agent_id TEXT NOT NULL,
+            agent_name TEXT NOT NULL,
+            category TEXT NOT NULL,
+            insight TEXT NOT NULL,
+            evidence TEXT,
+            confidence REAL NOT NULL,
+            ticker TEXT,
+            created_at INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS backtest_runs (
+            id TEXT PRIMARY KEY,
+            agent_id TEXT NOT NULL,
+            strategy_version TEXT,
+            start_date TEXT NOT NULL,
+            end_date TEXT NOT NULL,
+            initial_capital REAL NOT NULL,
+            final_capital REAL NOT NULL,
+            total_return REAL NOT NULL,
+            sharpe REAL,
+            max_drawdown REAL,
+            win_rate REAL,
+            num_trades INTEGER,
+            daily_returns TEXT,
+            created_at INTEGER NOT NULL
+        );
         """
         with self._conn() as conn:
             conn.executescript(ddl)
@@ -211,6 +240,43 @@ class DatabaseManager:
             conn.execute(sql, (
                 id, agent_id, ticker, signal_type, direction, strength, source,
                 json.dumps(payload) if payload else None, created_at
+            ))
+
+    def insert_shared_knowledge(self, id: str, agent_id: str, agent_name: str,
+                                category: str, insight: str, evidence: dict = None,
+                                confidence: float = 0.5, ticker: str = None,
+                                created_at: int = None):
+        sql = """
+        INSERT OR REPLACE INTO shared_knowledge
+            (id, agent_id, agent_name, category, insight, evidence, confidence, ticker, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        with self._conn() as conn:
+            conn.execute(sql, (
+                id, agent_id, agent_name, category, insight,
+                json.dumps(evidence) if evidence else None,
+                confidence, ticker, created_at
+            ))
+
+    def insert_backtest_run(self, id: str, agent_id: str, strategy_version: str,
+                            start_date: str, end_date: str, initial_capital: float,
+                            final_capital: float, total_return: float, sharpe: float = None,
+                            max_drawdown: float = None, win_rate: float = None,
+                            num_trades: int = None, daily_returns: list = None,
+                            created_at: int = None):
+        sql = """
+        INSERT OR REPLACE INTO backtest_runs
+            (id, agent_id, strategy_version, start_date, end_date, initial_capital,
+             final_capital, total_return, sharpe, max_drawdown, win_rate, num_trades,
+             daily_returns, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+        with self._conn() as conn:
+            conn.execute(sql, (
+                id, agent_id, strategy_version, start_date, end_date, initial_capital,
+                final_capital, total_return, sharpe, max_drawdown, win_rate, num_trades,
+                json.dumps(daily_returns) if daily_returns is not None else None,
+                created_at
             ))
 
     def record_daily_perf(self, id: str, agent_id: str, date: str,

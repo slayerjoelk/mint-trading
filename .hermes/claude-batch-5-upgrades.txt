@@ -1,0 +1,109 @@
+You are Claude Code. Build 2 CRITICAL UPGRADES for the Mint Trading Company.
+
+Read these files first to understand the system:
+- core/db.py — understand tables, insert methods
+- agents/base_agent.py — understand agent interface, journal_entry(), get_performance_metrics(), save_strategy()
+- core/market.py — understand submit_order(), get_bars()
+- core/data_pipeline.py — understand get_daily_bars(), get_features()
+
+=== UPGRADE 1: core/backtest_engine.py ===
+
+Create a BacktestEngine class. This is the single most important file we're building.
+
+How it works:
+- Replays historical daily bar data through the FULL trading pipeline
+- For each trading day in the historical window: generate_signals() → risk.validate_trade() → simulate execution → track portfolio P&L → end-of-day learn_from_trades()
+
+Interface:
+```
+class BacktestEngine:
+    def __init__(self, data_pipeline, risk_manager, db):
+        self.data = data_pipeline
+        self.risk = risk_manager
+        self.db = db
+        self.slippage_pct = 0.001  # 10 bps default
+        self.commission_per_share = 0.005  # $0.005/share default
+
+    def run(self, agent, tickers: list[str], start_date: str, end_date: str, initial_capital: float = 100000) -> dict:
+        """Run backtest. Returns metrics dict: total_return, sharpe, max_drawdown, win_rate, trades, daily_returns[], final_capital"""
+```
+
+Implementation details:
+- Loop through each trading day in the date range
+- For each day, pull the day's bar data (open, close prices)
+- Call `agent.generate_signals()` — but the agent must be able to work with historical data, not live data. Add a `set_override_data(day_data)` method or similar approach so the agent uses historical bars instead of live Alpaca calls.
+- For each signal: calculate position size from risk manager, simulate fill at close price + slippage
+- Track open positions: on subsequent days, check exit conditions
+- At end of each day, call agent.learn_from_trades() on closed trades
+- Record daily portfolio values
+- At end: calculate Sharpe, max drawdown, win rate, total return
+- Save backtest result to a new DB table `backtest_runs` with: id, agent_id, strategy_version, start_date, end_date, initial_capital, final_capital, total_return, sharpe, max_drawdown, win_rate, num_trades, daily_returns (JSON), created_at
+
+The backtest must NOT hit Alpaca APIs at all. It must use the historical data pipeline exclusively.
+
+=== UPGRADE 2: core/shared_knowledge.py ===
+
+A shared learning repository that all agents contribute to and query. This breaks the agent-isolation problem.
+
+```
+class SharedKnowledge:
+    def __init__(self, db):
+        self.db = db
+
+    def add_insight(self, agent_id, agent_name, category, insight, evidence, confidence, created_at):
+        """Save a structured insight to the knowledge base."""
+    
+    def query(self, category=None, ticker=None, min_confidence=0.5) -> list[dict]:
+        """Query insights. E.g., category='regime' returns all regime insights from all agents."""
+    
+    def get_regime_playbook(self, regime: str) -> dict:
+        """Given a market regime, return aggregated advice from all agents: 
+        which strategies work, which tickers benefit, risk adjustments."""
+    
+    def get_ticker_consensus(self, ticker: str) -> dict:
+        """Across all agents, what's the aggregate opinion on this ticker? 
+        Returns: avg_confidence, buy_signals, sell_signals, hold_signals, 
+        consensus (strong_buy/buy/neutral/sell/strong_sell)."""
+```
+
+Create a new DB table: `shared_knowledge` with columns:
+  id, agent_id, agent_name, category, insight (text), evidence (JSON), confidence (float), ticker, created_at
+
+Categories: regime, ticker_behavior, risk_parameter, entry_timing, exit_timing, sector_rotation, correlation, volatility, news_impact
+
+Also update each of the 4 agents' learn_from_trades() methods to call SharedKnowledge.add_insight() after they complete their own learning. Each agent should contribute at least 2-3 insights after each learning cycle. The insight format must be: "In [{regime}] regime, {ticker} reverted to mean in avg {X} days (evidence: {details}). Confidence: {Y}."
+
+=== TESTING ===
+
+After building both files, test:
+```
+cd /Users/a887/Desktop/Coding\ Projects/mint-trading && /usr/bin/python3 -c "
+from core.db import DatabaseManager
+from core.data_pipeline import DataPipeline
+from core.risk_manager import RiskManager
+from core.market import MarketInterface
+from core.news_pipeline import NewsPipeline
+from agents.athena.athena_agent import AthenaAgent
+
+db = DatabaseManager(); db.create_tables()
+data = DataPipeline()
+market = MarketInterface()
+news = NewsPipeline(db)
+risk = RiskManager(market, db)
+
+from core.backtest_engine import BacktestEngine
+from core.shared_knowledge import SharedKnowledge
+
+sk = SharedKnowledge(db)
+sk.add_insight('test-agent', 'Test', 'regime', 'Mean reversion accelerates in ranging', {'avg_days': 3.2}, 0.85, 1234567890)
+results = sk.query(category='regime')
+print(f'SharedKnowledge: OK — {len(results)} results')
+
+athena = AthenaAgent(100000, db, market, data, news, risk)
+engine = BacktestEngine(data, risk, db)
+result = engine.run(athena, ['AAPL', 'MSFT'], '2025-12-01', '2026-01-31', 100000)
+print(f'Backtest: OK — Return: {result.get(\"total_return\", 0):+.2%}, Sharpe: {result.get(\"sharpe\", 0):.2f}, WR: {result.get(\"win_rate\", 0):.1%}')
+"
+```
+
+Report results.

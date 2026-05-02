@@ -1,0 +1,47 @@
+You are Claude Code. Build the final upgrade for Mint Trading Company.
+
+Read the architecture file: .hermes/deep-audit-findings.md (specifically items 7 and 11-14).
+
+=== FILE: core/alternative_data.py ===
+
+An alternative data pipeline that supplements price data with additional signals.
+
+class AlternativeData:
+    def __init__(self, data_pipeline, db):
+        ...
+    
+    def get_options_flow(self, ticker: str) -> dict:
+        """Proxy for put/call sentiment. Use yfinance to pull option chain data.
+        Returns: put_call_ratio, open_interest, unusual_activity_score"""
+    
+    def get_sector_rotation(self) -> dict:
+        """Compare sector ETF performance: XLK, XLF, XLE, XLV, XLI, XLY, XLRE, XLU, XLB, XLP.
+        Returns: top_sectors (best 3 performers in last 20 days),
+        bottom_sectors (worst 3), rotation_signal (where money is flowing)"""
+    
+    def get_market_breadth(self) -> dict:
+        """IWM vs SPY, advance/decline proxy via RSP vs SPY trend.
+        Returns: breadth_health, participation_score, divergence_warning"""
+    
+    def get_economic_surprise_proxy(self) -> float:
+        """Proxy for economic surprise index using TLT/SHY ratio as growth/recession signal.
+        Returns: growth_score (-1 to +1, positive = expansionary surprise)"""
+
+Test:
+```
+/usr/bin/python3 -c "
+from core.db import DatabaseManager
+from core.data_pipeline import DataPipeline
+from core.alternative_data import AlternativeData
+db = DatabaseManager(); db.create_tables()
+data = DataPipeline()
+alt = AlternativeData(data, db)
+rot = alt.get_sector_rotation()
+breadth = alt.get_market_breadth()
+print(f'Sector rotation: {rot}')
+print(f'Market breadth: {breadth}')
+print('Alternative data pipeline: OK')
+"
+```
+
+Integrate into croesus.py morning routine: call alt.get_sector_rotation() and alt.get_market_breadth(), include findings in the signal context so agents can filter by sector strength and breadth health.

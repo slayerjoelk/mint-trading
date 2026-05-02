@@ -13,10 +13,15 @@ from core.market import MarketInterface
 from core.data_pipeline import DataPipeline
 from core.news_pipeline import NewsPipeline
 from core.risk_manager import RiskManager
+from core.crypto_market import CryptoMarket
+from core.shared_knowledge import SharedKnowledge
+from core.backtest_engine import BacktestEngine
+from core.regime_classifier import RegimeClassifier
 from agents.athena.athena_agent import AthenaAgent
 from agents.orion.orion_agent import OrionAgent
 from agents.sibyl.sibyl_agent import SibylAgent
 from agents.janus.janus_agent import JanusAgent
+from agents.mercury.mercury_agent import MercuryAgent
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -39,6 +44,10 @@ market = MarketInterface()
 data = DataPipeline()
 news = NewsPipeline(db)
 risk = RiskManager(market, db)
+crypto = CryptoMarket()
+sk = SharedKnowledge(db)
+regime_cls = RegimeClassifier(data, db)
+backtest = BacktestEngine(data, risk, db)
 
 
 def spawn_agents():
@@ -47,6 +56,7 @@ def spawn_agents():
         "orion": OrionAgent(25000, db, market, data, news, risk),
         "sibyl": SibylAgent(15000, db, market, data, news, risk),
         "janus": JanusAgent(15000, db, market, data, news, risk),
+        "mercury": MercuryAgent(15000, db, market, data, news, risk, crypto_market=crypto, shared_knowledge=sk),
     }
     print("\n=== MINT TRADING COMPANY — AGENTS SPAWNED ===\n")
     for name, agent in agents.items():
@@ -164,6 +174,31 @@ def weekly_review():
     regime = data.get_market_regime()
     print(f"\nMarket regime: {regime}")
     print(f"Agents that benefit: {'Athena, Janus' if regime == 'ranging' else 'Orion' if regime == 'trending_up' else 'Janus (defensive)' if regime == 'trending_down' else 'All'}")
+
+    # EXECUTE capital reallocation — not just print
+    executed = []
+    for name, sharpe, wr, pnl, trades in rankings:
+        agent = agents[name]
+        prev_capital = agent._initial_capital
+        if wr > 0.55 and sharpe > 1.0:
+            new_cap = min(prev_capital * 1.3, 40000)
+            agent._initial_capital = new_cap
+            agent.save_config({"initial_capital": new_cap})
+            executed.append(f"{name}: ↑ SCALE {prev_capital:,.0f} → {new_cap:,.0f}")
+        elif wr < 0.40 and trades > 10:
+            new_cap = max(prev_capital * 0.5, 5000)
+            agent._initial_capital = new_cap
+            agent.save_config({"initial_capital": new_cap})
+            executed.append(f"{name}: ↓ REDUCE {prev_capital:,.0f} → {new_cap:,.0f}")
+        elif wr < 0.30 and trades > 20:
+            risk.kill_switch(agent.agent_id)
+            executed.append(f"{name}: ☠ KILLED — positions liquidated")
+        else:
+            executed.append(f"{name}: → HOLD at {prev_capital:,.0f}")
+
+    print("\nExecuted changes:\n")
+    for e in executed:
+        print(f"  {e}")
 
     report_path = os.path.join(ROOT, ".hermes", "weekly-reports", f"{_today()}.md")
     os.makedirs(os.path.dirname(report_path), exist_ok=True)
