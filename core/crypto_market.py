@@ -70,7 +70,9 @@ class CryptoMarket:
                 return {"id": order.get("id", ""), "status": "filled", "symbol": symbol, "amount": amount}
             except Exception as e:
                 return {"error": str(e)}
-        # Paper mock
+        # Paper mock — MUST include "filled_avg_price" key so croesus.py can read it
         ticker = self.get_ticker(symbol)
+        last = ticker.get("last", 0)
         return {"id": "paper-" + symbol, "status": "filled", "symbol": symbol,
-                "amount": amount, "price": ticker.get("last", 0), "paper": True}
+                "amount": amount, "price": last,
+                "filled_avg_price": last, "paper": True}
