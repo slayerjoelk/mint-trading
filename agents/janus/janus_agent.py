@@ -270,6 +270,9 @@ class JanusAgent(BaseAgent):
         vixy_low = float(self._config.get("vixy_low_threshold", 15.0))
         lev_dev = float(self._config.get("leveraged_dev_threshold", 0.02))
         regime = self.data.get_market_regime()
+        
+        # Get the latest bar open time for deduplication
+        bar_open_time = self.data.get_latest_bar_open("SPY")
 
         signals = []
 
@@ -328,6 +331,7 @@ class JanusAgent(BaseAgent):
                         "type": "market",
                         "reason": reason,
                         "confidence": 1.0,
+                        "bar_open_time": bar_open_time,
                     })
                 except Exception as exc:
                     logger.error("Janus exit check [%s]: %s", ticker, exc)
@@ -391,6 +395,7 @@ class JanusAgent(BaseAgent):
                         "type": "market",
                         "reason": reason_vixy,
                         "confidence": confidence,
+                        "bar_open_time": bar_open_time,
                     })
 
                     # Also BUY SVXY (inverse vol — profits when vol falls)
@@ -422,6 +427,7 @@ class JanusAgent(BaseAgent):
                                         "type": "market",
                                         "reason": reason_svxy,
                                         "confidence": round(confidence * 0.9, 4),
+                                        "bar_open_time": bar_open_time,
                                     })
                         except Exception as exc:
                             logger.error("Janus SVXY signal: %s", exc)
@@ -476,6 +482,7 @@ class JanusAgent(BaseAgent):
                         "type": "market",
                         "reason": reason,
                         "confidence": confidence,
+                        "bar_open_time": bar_open_time,
                     })
         except Exception as exc:
             logger.error("Janus contango hedge check: %s", exc)
@@ -551,13 +558,16 @@ class JanusAgent(BaseAgent):
                             "type": "market",
                             "reason": reason,
                             "confidence": round(confidence, 4),
+                            "bar_open_time": bar_open_time,
                         })
 
         except Exception as exc:
             logger.error("Janus TQQQ/QQQ divergence check: %s", exc)
 
         signals.sort(key=lambda s: (0 if s["confidence"] == 1.0 else 1, -s["confidence"]))
-        return signals[:5]
+        # Filter out signals from bars we've already acted on
+        filtered = self._filter_deduplicated_signals(signals[:5])
+        return filtered
 
     # ------------------------------------------------------------------ learning
 

@@ -1,12 +1,13 @@
+agent_id: 3ae5d7e6-8b0d-40a6-b088-08c91f3818af
 asset_focus: high_beta_tech
 breakout_period: 20
 created_at: '2026-05-02T14:38:01.213662+00:00'
 exit_period: 10
 hold_days: 7
-initial_capital: 25000
+initial_capital: 500
 max_positions: 5
 name: Orion
 risk_per_trade: 0.02
-strategy_version: '1.0'
+strategy_version: '1.1'
 style: momentum_breakout
 volume_multiplier: 1.5

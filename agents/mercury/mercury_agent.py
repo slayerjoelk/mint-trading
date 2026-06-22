@@ -45,8 +45,9 @@ class MercuryAgent(BaseAgent):
         self.save_config()
 
     def _ticker_to_symbol(self, pair: str) -> str:
-        """BTC/USDT → BTC-USD for yfinance lookups if needed."""
-        return pair.replace("/", "-")
+        """BTC/USDT → BTC/USD for Alpaca crypto trading. Alpaca accepts BTC/USD or BTCUSD, NOT BTC-USD."""
+        base = pair.split("/")[0].upper()
+        return f"{base}/USD"
 
     # ──────────────────────────────────────────────────────────────── research
 
@@ -125,6 +126,14 @@ class MercuryAgent(BaseAgent):
             return []
         signals = []
         pairs = self.UNIVERSE
+        
+        # Get the latest bar open time for deduplication (using crypto 1d bars)
+        bar_open_time = None
+        ohlcv = self.crypto.get_ohlcv("BTC/USDT", "1d", 2)
+        if ohlcv and len(ohlcv) > 0:
+            # ccxt OHLCV: [timestamp, open, high, low, close, volume]
+            # timestamp is in milliseconds
+            bar_open_time = ohlcv[-1][0] // 1000  # convert to seconds
 
         btc_ticker = self.crypto.get_ticker("BTC/USDT")
         btc_price = btc_ticker.get("last", 0)
@@ -144,42 +153,52 @@ class MercuryAgent(BaseAgent):
             sma20 = float(np.mean(closes[-20:]))
             sma50 = float(np.mean(closes[-min(50, len(closes)):]))
             rsi = self._compute_rsi(closes, 14)[-1]
-            bb_lower, bb_mid = self._compute_bb(closes, 20, 2.0)
+            bb_lower_list, bb_mid_list = self._compute_bb(closes, 20, 2.0)
+            bb_lower = bb_lower_list[-1] if bb_lower_list else None
+            bb_mid = bb_mid_list[-1] if bb_mid_list else None
 
             # Trend strategy: above SMAs → long on pullbacks
             if current > sma20 > sma50 and rsi is not None:
                 pullback = (current - sma20) / sma20 if sma20 > 0 else 0
                 if -0.03 < pullback < 0.01:
-                    qty = max(1, int((self.capital * 0.1) / current))
+                    max_usd = min(self.capital * 0.10, 50)
+                    qty = round(max_usd / current, 6)
                     signals.append({
-                        "symbol": pair.replace("/", ""), "side": "buy",
+                        "symbol": self._ticker_to_symbol(pair), "side": "buy",
                         "quantity": qty, "type": "market",
                         "reason": f"MERCURY_TREND | {pair} @ ${current:.2f} | Pullback to SMA20 (deviation={pullback*100:+.1f}%) | BTC_dominance={btc_dominance:.2f}",
                         "confidence": 0.65,
+                        "bar_open_time": bar_open_time,
                     })
 
             # Mean reversion: RSI oversold + below BB lower
             if rsi is not None and bb_lower is not None and rsi < 30 and current < bb_lower:
-                qty = max(1, int((self.capital * 0.08) / current))
+                max_usd = min(self.capital * 0.08, 40)
+                qty = round(max_usd / current, 6)
                 deviation = (bb_lower - current) / bb_lower * 100
                 signals.append({
-                    "symbol": pair.replace("/", ""), "side": "buy",
+                    "symbol": self._ticker_to_symbol(pair), "side": "buy",
                     "quantity": qty, "type": "market",
                     "reason": f"MERCURY_MR | {pair} @ ${current:.2f} | RSI={rsi:.1f} below BB_lower=${bb_lower:.2f} ({deviation:.1f}% below) | Target BB_mid=${bb_mid:.2f}",
                     "confidence": 0.75,
+                    "bar_open_time": bar_open_time,
                 })
 
             # BTC dominance rotation
             if pair == "BTC/USDT" and btc_dominance > 0.55:
-                qty = max(1, int((self.capital * 0.10) / current))
+                max_usd = min(self.capital * 0.10, 50)
+                qty = round(max_usd / current, 6)
                 signals.append({
-                    "symbol": "BTCUSDT", "side": "buy",
+                    "symbol": self._ticker_to_symbol(pair), "side": "buy",
                     "quantity": qty, "type": "market",
                     "reason": f"MERCURY_BTC_ROTATION | BTC dominance {btc_dominance:.2f} > 0.55 — rotating to BTC over alts",
                     "confidence": 0.60,
+                    "bar_open_time": bar_open_time,
                 })
 
-        return sorted(signals, key=lambda s: s["confidence"], reverse=True)[:5]
+        sorted_signals = sorted(signals, key=lambda s: s["confidence"], reverse=True)[:5]
+        # Filter out signals from bars we've already acted on
+        return self._filter_deduplicated_signals(sorted_signals)
 
     # ──────────────────────────────────────────────────────────────── learning
 

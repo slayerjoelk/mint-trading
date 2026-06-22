@@ -19,7 +19,7 @@ class OrionAgent(BaseAgent):
 
     UNIVERSE = [
         "NVDA", "AMD", "TSLA", "META", "NFLX", "CRM", "ADBE",
-        "SHOP", "SNOW", "PLTR", "COIN", "SQ", "UBER", "DDOG", "NET",
+        "SHOP", "SNOW", "PLTR", "COIN", "XYZ", "UBER", "DDOG", "NET",
     ]
 
     _DEFAULTS = {
@@ -196,6 +196,11 @@ class OrionAgent(BaseAgent):
         vol_mult = float(self._config.get("volume_multiplier", 1.5))
         hold_days = int(self._config.get("hold_days", 7))
         regime = self.data.get_market_regime()
+        
+        # Get the latest bar open time for deduplication
+        bar_open_time = None
+        sample_ticker = self.UNIVERSE[0] if self.UNIVERSE else "SPY"
+        bar_open_time = self.data.get_latest_bar_open(sample_ticker)
 
         exit_signals = []
         entry_signals = []
@@ -267,6 +272,7 @@ class OrionAgent(BaseAgent):
                         "type": "market",
                         "reason": reason,
                         "confidence": 1.0,
+                        "bar_open_time": bar_open_time,
                     })
             except Exception as exc:
                 logger.error("Orion exit check [%s]: %s", ticker, exc)
@@ -339,6 +345,7 @@ class OrionAgent(BaseAgent):
                         "type": "market",
                         "reason": reason,
                         "confidence": confidence,
+                        "bar_open_time": bar_open_time,
                     })
 
                 except Exception as exc:
@@ -350,7 +357,9 @@ class OrionAgent(BaseAgent):
 
         entry_signals.sort(key=lambda s: s["confidence"], reverse=True)
         combined = exit_signals + entry_signals
-        return combined[:5]
+        # Filter out signals from bars we've already acted on
+        filtered = self._filter_deduplicated_signals(combined[:5])
+        return filtered
 
     # ------------------------------------------------------------------ learning
 

@@ -1,0 +1,33 @@
+{
+  "last_updated": "2026-05-06T08:00:00Z",
+  "posts": [
+    {
+      "id": "bp-001",
+      "title": "How Scope Creep Kills Agency Margins (And the 90-Second Fix)",
+      "status": "planned",
+      "seo_target": "scope creep freelancer",
+      "angle": "Turn verbal agreements into signed receipts before work starts."
+    },
+    {
+      "id": "bp-002",
+      "title": "Turn a WhatsApp Voice Note Into a Legally-Signed Receipt",
+      "status": "planned",
+      "seo_target": "WhatsApp contract",
+      "angle": "No more 'I thought you said…' — voice → structured receipt → OTP sign-off."
+    },
+    {
+      "id": "bp-003",
+      "title": "Why 'Send me the contract' Is Killing Your Close Rate",
+      "status": "planned",
+      "seo_target": "verbal agreement sign off",
+      "angle": "Speed beats ceremony. Capture agreement while intent is hot."
+    },
+    {
+      "id": "bp-004",
+      "title": "Conversation Receipts: A New Category for Async Work",
+      "status": "draft",
+      "seo_target": "conversation receipt",
+      "angle": "Introducing the missing layer between chat and contract."
+    }
+  ]
+}

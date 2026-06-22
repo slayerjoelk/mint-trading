@@ -1,7 +1,9 @@
+agent_id: b765265b-d086-4208-a792-2ef1dff086f0
 asset_focus: crypto_top_10
 btc_dom_threshold: 0.05
 created_at: '2026-05-02T16:08:43.599160+00:00'
-initial_capital: 15000
+initial_capital: 500
+last_acted_barrier: 1781827200
 max_hold_days: 7
 max_positions: 5
 mr_bb_period: 20
@@ -10,7 +12,7 @@ mr_rsi_overbought: 70
 mr_rsi_oversold: 30
 name: Mercury
 risk_per_trade: 0.02
-strategy_version: '1.0'
+strategy_version: '1.1'
 style: crypto_momentum_structure
 trend_sma_long: 50
 trend_sma_short: 20

@@ -29,7 +29,8 @@ class BaseAgent:
         news,
         risk,
     ):
-        self.agent_id = str(uuid.uuid4())
+        # Default UUID (overridden below if config has a durable id)
+        self.agent_id = ""
         self.name = name
         self.style = style
         self.asset_focus = asset_focus
@@ -45,6 +46,18 @@ class BaseAgent:
 
         self._config_path = self._agent_dir / "config.yaml"
         self._config = self._load_or_create_config()
+
+        # Durable agent_id: load from config (first spawn generates UUID, persisting forever)
+        config_id = self._config.get("agent_id")
+        if config_id:
+            self.agent_id = config_id
+        else:
+            self.agent_id = str(uuid.uuid4())
+            self._config["agent_id"] = self.agent_id
+            self.save_config()
+
+        # Closed-bar deduplication: track the last bar open time we acted on
+        self._last_acted_barrier = self._config.get("last_acted_barrier")
 
         db.insert_agent(
             id=self.agent_id,
@@ -123,6 +136,36 @@ class BaseAgent:
     @property
     def sharpe_approx(self) -> float:
         return self.get_performance_metrics().get("sharpe_approx", 0.0)
+
+    @property
+    def last_acted_barrier(self) -> Optional[int]:
+        """The timestamp of the last bar open we acted on (for deduplication)."""
+        return self._last_acted_barrier
+
+    @last_acted_barrier.setter
+    def last_acted_barrier(self, value: Optional[int]) -> None:
+        """Set the last acted barrier and persist to config."""
+        self._last_acted_barrier = value
+        self._config["last_acted_barrier"] = value
+        self.save_config()
+
+    def _filter_deduplicated_signals(self, signals: list[dict]) -> list[dict]:
+        """
+        Filter out signals from bars we've already acted on.
+        Each signal must have a 'bar_open_time' field (timestamp of the bar's open).
+        Returns only signals where bar_open_time > last_acted_barrier.
+        """
+        if self._last_acted_barrier is None:
+            return signals
+        filtered = []
+        for sig in signals:
+            bar_open = sig.get("bar_open_time")
+            if bar_open is None:
+                # If no bar_open_time, include it (legacy behavior)
+                filtered.append(sig)
+            elif bar_open > self._last_acted_barrier:
+                filtered.append(sig)
+        return filtered
 
     # ------------------------------------------------- abstract interface
 

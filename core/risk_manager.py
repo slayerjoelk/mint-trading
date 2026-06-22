@@ -1,4 +1,9 @@
 from datetime import datetime, timezone, date
+import logging
+
+from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
+
+logger = logging.getLogger(__name__)
 
 
 def _today_unix_range() -> tuple[int, int]:
@@ -115,17 +120,53 @@ class RiskManager:
         max_shares = int((agent_capital * self.max_position_pct) / price)
         return max(0, min(shares, max_shares))
 
-    def check_portfolio_exposure(self, agent_id: str) -> float:
+    def check_portfolio_exposure(self, agent_id: str = None) -> float:
+        """Compute total portfolio exposure from live Alpaca positions AND DB open trades."""
         account = self.market.get_account()
         if "error" in account:
             return 0.0
         portfolio_value = float(account.get("portfolio_value") or 0)
         if portfolio_value <= 0:
             return 0.0
+        
+        # Start with live Alpaca positions
         positions = self.market.get_positions()
-        if not positions or isinstance(positions, dict):
-            return 0.0
-        total_equity = sum(float(p.get("market_value") or 0) for p in positions)
+        total_equity = 0.0
+        if positions and not isinstance(positions, dict):
+            total_equity = sum(float(p.get("market_value") or 0) for p in positions)
+        
+        # Also include DB open trades that may not be reflected in live positions
+        # (ensures old positions count even if there's a sync delay)
+        try:
+            conn = self.db._conn()
+            # Get open trades with entry_price > 0
+            db_trades = conn.execute(
+                "SELECT ticker, qty, entry_price FROM trades WHERE status = 'open' AND entry_price > 0"
+            ).fetchall()
+            conn.close()
+            
+            # Fetch current prices for DB positions not in live positions
+            live_symbols = {p.get("symbol") for p in positions} if positions and not isinstance(positions, dict) else set()
+            for trade in db_trades:
+                ticker = trade["ticker"]
+                qty = float(trade["qty"] or 0)
+                entry_price = float(trade["entry_price"] or 0)
+                if qty > 0 and entry_price > 0 and ticker not in live_symbols:
+                    # Try to get current price via market interface
+                    try:
+                        bars = self.market.get_bars([ticker], timeframe="1Day", limit=1)
+                        if bars and not isinstance(bars, dict) and ticker in bars:
+                            current_price = float(bars[ticker][0]["close"])
+                            total_equity += qty * current_price
+                        else:
+                            # Fallback to entry price
+                            total_equity += qty * entry_price
+                    except Exception:
+                        # Fallback to entry price if we can't fetch current price
+                        total_equity += qty * entry_price
+        except Exception as exc:
+            logger.warning("check_portfolio_exposure DB query error: %s", exc)
+        
         return total_equity / portfolio_value
 
     def is_agent_in_drawdown(self, agent_id: str) -> bool:

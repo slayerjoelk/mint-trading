@@ -106,6 +106,15 @@ class RegimeClassifier:
         regime, _ = self.classify_with_confidence(date)
         return regime
 
+    def classify_regime_str(self, date=None) -> str:
+        """
+        Return the current regime as a canonical string key.
+        Returns one of: 'trending_up', 'trending_down', 'ranging', 
+                        'high_volatility', 'low_volatility', 'crisis', 'unknown'
+        """
+        regime, _ = self.classify_with_confidence(date)
+        return regime
+
     def classify_with_confidence(self, date=None) -> tuple:
         feats = self.get_features_for_date(end_date=date)
         if not feats or len(feats) < 3:

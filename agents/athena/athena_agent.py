@@ -199,6 +199,12 @@ class AthenaAgent(BaseAgent):
         max_atr_pct = float(self._config.get("max_atr_pct", 0.03))
         hold_days = int(self._config.get("hold_days", 5))
         regime = self.data.get_market_regime()
+        
+        # Get the latest bar open time for deduplication
+        bar_open_time = None
+        sample_ticker = self.UNIVERSE[0] if self.UNIVERSE else "SPY"
+        bar_open_time = self.data.get_latest_bar_open(sample_ticker)
+        
         signals = []
 
         for ticker in self.UNIVERSE:
@@ -243,12 +249,14 @@ class AthenaAgent(BaseAgent):
                     confidence = min(1.0, 0.5 + deviation_multiples * 0.5)
                     pct_below = (bb_lower - close) / close * 100
                     dev_desc = f"${(bb_lower - close):.2f} ({pct_below:.2f}%) below BB_lower"
+                    macd_str = f"MACD_hist={macd_hist:.4f}. " if macd_hist is not None else "MACD_hist=N/A. "
+                    vol_str = f"Vol_ratio={vol_ratio:.2f}. " if vol_ratio is not None else "Vol_ratio=N/A. "
                     entry_thesis = (
                         f"Price {dev_desc}. RSI={rsi:.1f} confirms oversold (<{rsi_oversold}). "
                         f"ATR={atr:.2f} ({atr_pct*100:.2f}% of price — within {max_atr_pct*100:.0f}% threshold). "
                         f"Target reversion to SMA20=${sma20:.2f} within {hold_days} days. "
-                        f"MACD_hist={macd_hist:.4f if macd_hist else 'N/A'}. "
-                        f"Vol_ratio={vol_ratio:.2f if vol_ratio else 'N/A'}. "
+                        f"{macd_str}"
+                        f"{vol_str}"
                         f"Market regime: {regime}."
                     )
 
@@ -258,12 +266,14 @@ class AthenaAgent(BaseAgent):
                     confidence = min(1.0, 0.5 + deviation_multiples * 0.5)
                     pct_above = (close - bb_upper) / close * 100
                     dev_desc = f"${(close - bb_upper):.2f} ({pct_above:.2f}%) above BB_upper"
+                    macd_str = f"MACD_hist={macd_hist:.4f}. " if macd_hist is not None else "MACD_hist=N/A. "
+                    vol_str = f"Vol_ratio={vol_ratio:.2f}. " if vol_ratio is not None else "Vol_ratio=N/A. "
                     entry_thesis = (
                         f"Price {dev_desc}. RSI={rsi:.1f} confirms overbought (>{rsi_overbought}). "
                         f"ATR={atr:.2f} ({atr_pct*100:.2f}% of price — within threshold). "
                         f"Target reversion to SMA20=${sma20:.2f} within {hold_days} days. "
-                        f"MACD_hist={macd_hist:.4f if macd_hist else 'N/A'}. "
-                        f"Vol_ratio={vol_ratio:.2f if vol_ratio else 'N/A'}. "
+                        f"{macd_str}"
+                        f"{vol_str}"
                         f"Market regime: {regime}."
                     )
 
@@ -293,13 +303,16 @@ class AthenaAgent(BaseAgent):
                     "type": "market",
                     "reason": reason,
                     "confidence": round(confidence, 4),
+                    "bar_open_time": bar_open_time,
                 })
 
             except Exception as exc:
                 logger.error("Athena signal [%s]: %s", ticker, exc)
 
         signals.sort(key=lambda s: s["confidence"], reverse=True)
-        return signals[:5]
+        # Filter out signals from bars we've already acted on
+        filtered = self._filter_deduplicated_signals(signals[:5])
+        return filtered
 
     # ------------------------------------------------------------------ learning
 

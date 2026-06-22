@@ -75,13 +75,16 @@ class MarketInterface:
         try:
             _side = OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL
             _type = type.lower()
+            # Crypto symbols contain "/" (e.g. BTC/USD). Alpaca crypto only accepts GTC or IOC, not DAY.
+            is_crypto = "/" in symbol
+            tif = TimeInForce.GTC if is_crypto else TimeInForce.DAY
 
             if _type == "market":
                 req = MarketOrderRequest(
                     symbol=symbol,
                     qty=qty,
                     side=_side,
-                    time_in_force=TimeInForce.DAY,
+                    time_in_force=tif,
                 )
             elif _type == "limit":
                 if limit_price is None:
@@ -90,7 +93,7 @@ class MarketInterface:
                     symbol=symbol,
                     qty=qty,
                     side=_side,
-                    time_in_force=TimeInForce.DAY,
+                    time_in_force=tif,
                     limit_price=limit_price,
                 )
             elif _type == "stop_limit":
@@ -100,7 +103,7 @@ class MarketInterface:
                     symbol=symbol,
                     qty=qty,
                     side=_side,
-                    time_in_force=TimeInForce.DAY,
+                    time_in_force=tif,
                     limit_price=limit_price,
                     stop_price=stop_price,
                 )

@@ -28,6 +28,19 @@ class DataPipeline:
             logger.error("get_daily_bars error [%s]: %s", ticker, e)
             return None
 
+    def get_latest_bar_open(self, ticker: str, period: str = "3mo") -> Optional[int]:
+        """
+        Get the timestamp of the most recent bar's open time.
+        Returns Unix timestamp (int) or None if no data available.
+        """
+        df = self.get_daily_bars(ticker, period=period)
+        if df is None or df.empty:
+            return None
+        # The index is a DatetimeIndex; get the latest date and convert to timestamp
+        latest_date = df.index[-1]
+        # Convert to Unix timestamp (pandas Timestamp has .timestamp() method)
+        return int(latest_date.timestamp())
+
     # ── Indicators ────────────────────────────────────────────────────────────
 
     def compute_indicators(self, df: pd.DataFrame) -> pd.DataFrame:

@@ -172,3 +172,73 @@ class SharedKnowledge:
             "consensus": consensus,
             "insights": insights[:10],
         }
+
+    def combine_signals(self, signals_by_agent: dict, regime: str = None) -> dict:
+        """
+        Combine signals from multiple agents using regime-adaptive weights.
+        
+        Args:
+            signals_by_agent: Dict mapping agent name to list of signals
+                e.g., {"orion": [...], "athena": [...], "janus": [...], "sibyl": [...]}
+            regime: Optional regime string. If provided, uses dynamic weights.
+                    If None, falls back to static equal weights.
+        
+        Returns:
+            Dict with combined signals and metadata:
+            {
+                "combined_signals": [...],
+                "regime": regime or "default",
+                "weights_used": {...},
+            }
+        
+        Weight tables by regime:
+        - TRENDING_UP/TRENDING_DOWN: Orion=0.40, Athena=0.05, Janus=0.30, Sibyl=0.25
+        - RANGING: Orion=0.05, Athena=0.40, Janus=0.15, Sibyl=0.40
+        - HIGH_VOLATILITY: Orion=0.15, Athena=0.15, Janus=0.35, Sibyl=0.35
+        - LOW_VOLATILITY: Orion=0.25, Athena=0.25, Janus=0.25, Sibyl=0.25
+        - CRISIS: Orion=0.10, Athena=0.10, Janus=0.40, Sibyl=0.40
+        - Default (no regime): static weights (Orion=0.20, Athena=0.20, Janus=0.20, Sibyl=0.20)
+        """
+        # Define weight tables
+        WEIGHT_TABLES = {
+            "trending_up": {"orion": 0.40, "athena": 0.05, "janus": 0.30, "sibyl": 0.25},
+            "trending_down": {"orion": 0.40, "athena": 0.05, "janus": 0.30, "sibyl": 0.25},
+            "ranging": {"orion": 0.05, "athena": 0.40, "janus": 0.15, "sibyl": 0.40},
+            "high_volatility": {"orion": 0.15, "athena": 0.15, "janus": 0.35, "sibyl": 0.35},
+            "low_volatility": {"orion": 0.25, "athena": 0.25, "janus": 0.25, "sibyl": 0.25},
+            "crisis": {"orion": 0.10, "athena": 0.10, "janus": 0.40, "sibyl": 0.40},
+        }
+        
+        # Default static weights
+        DEFAULT_WEIGHTS = {"orion": 0.20, "athena": 0.20, "janus": 0.20, "sibyl": 0.20}
+        
+        # Select weights based on regime
+        regime_key = regime.lower() if regime else None
+        if regime_key and regime_key in WEIGHT_TABLES:
+            weights = WEIGHT_TABLES[regime_key]
+        else:
+            weights = DEFAULT_WEIGHTS
+        
+        # Combine signals with weighted scoring
+        combined = []
+        for agent_name, agent_signals in signals_by_agent.items():
+            agent_weight = weights.get(agent_name.lower(), 0.0)
+            for sig in agent_signals:
+                # Apply weight to confidence
+                weighted_conf = sig.get("confidence", 0.0) * agent_weight
+                combined.append({
+                    **sig,
+                    "agent": agent_name,
+                    "weighted_confidence": weighted_conf,
+                    "original_confidence": sig.get("confidence", 0.0),
+                    "agent_weight": agent_weight,
+                })
+        
+        # Sort by weighted confidence
+        combined.sort(key=lambda s: s.get("weighted_confidence", 0), reverse=True)
+        
+        return {
+            "combined_signals": combined,
+            "regime": regime or "default",
+            "weights_used": weights,
+        }

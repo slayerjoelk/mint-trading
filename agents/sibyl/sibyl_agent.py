@@ -260,6 +260,9 @@ class SibylAgent(BaseAgent):
         threshold_buy = float(self._config.get("sentiment_threshold_buy", 0.6))
         threshold_sell = float(self._config.get("sentiment_threshold_sell", -0.6))
         max_atr_pct = float(self._config.get("max_atr_pct", 0.05))
+        
+        # Get the latest bar open time for deduplication
+        bar_open_time = self.data.get_latest_bar_open("SPY")
 
         # EXIT signals: check open positions for sentiment reversal or PnL target
         exit_signals = []
@@ -338,6 +341,7 @@ class SibylAgent(BaseAgent):
                         "type": "market",
                         "reason": reason,
                         "confidence": 1.0,
+                        "bar_open_time": bar_open_time,
                     })
             except Exception as exc:
                 logger.error("Sibyl exit check [%s]: %s", ticker, exc)
@@ -462,6 +466,7 @@ class SibylAgent(BaseAgent):
                     "type": "market",
                     "reason": reason,
                     "confidence": round(confidence, 4),
+                    "bar_open_time": bar_open_time,
                 })
 
             except Exception as exc:
@@ -469,7 +474,9 @@ class SibylAgent(BaseAgent):
 
         entry_signals.sort(key=lambda s: s["confidence"], reverse=True)
         combined = exit_signals + entry_signals
-        return combined[:5]
+        # Filter out signals from bars we've already acted on
+        filtered = self._filter_deduplicated_signals(combined[:5])
+        return filtered
 
     # ------------------------------------------------------------------ learning
 
